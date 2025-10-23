@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .flash.success { @apply bg-green-100 text-green-800 border-green-400; }
+        .flash.warning { @apply bg-yellow-100 text-yellow-800 border-yellow-400; }
+        .flash.danger { @apply bg-red-100 text-red-800 border-red-400; }
+        .flash.info { @apply bg-blue-100 text-blue-800 border-blue-400; }
+        /* Style for modals */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <nav class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+        <h1 class="text-2xl font-bold text-blue-600">Club Dashboard</h1>
+        <div class="flex items-center space-x-4">
+            <span class="text-gray-700">Logged in as: 
+                <span class="font-semibold">{{ current_user_name }}</span> ({{ current_user_role | capitalize }})
+            </span>
+            <a href="{{ url_for('logout') }}" class="py-1 px-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">Log Out</a>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto p-6">
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-6 space-y-2">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }} p-4 rounded-lg border text-sm">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- CREATE Club Form -->
+        <div class="bg-white p-6 rounded-xl shadow-lg mb-8 border-t-4 border-blue-500">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">CREATE NEW </h2>
+            <form action="{{ url_for('create_club') }}" method="POST" class="space-y-4">
+                <div>
+                    <label for="club_name" class="block text-sm font-medium text-gray-700">Club Name</label>
+                    <input type="text" id="club_name" name="club_name" required 
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="club_description" class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea id="club_description" name="club_description" rows="3" required
+                              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                </div>
+                <button type="submit" class="py-2 px-4 rounded-lg shadow-md text-white bg-blue-600 hover:bg-blue-700 transition duration-150">
+                    Publish Club
+                </button>
+            </form>
+        </div>
+
+        <!-- READ Club List -->
+        <h2 class="text-2xl font-bold text-gray-800 mb-6">REGISTERED CLUBS </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for club in clubs %}
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h3 class="text-xl font-bold text-blue-700 mb-2">{{ club['name'] }}</h3>
+                    <p class="text-sm text-gray-600 mb-3">{{ club['description'] }}</p>
+                    <p class="text-xs text-gray-500">Created by: {{ club['created_by_name'] }} (ID: {{ club['officer_id'] }})</p>
+                    
+                    {% if club['officer_id'] == current_user_id %}
+                        <div class="mt-4 pt-4 border-t border-gray-100 flex space-x-2">
+                            <!-- Button to open the Edit Modal (UPDATE) -->
+                            <button onclick="openEditModal({{ club['id'] }}, '{{ club['name'] }}', '{{ club['description'] | replace("'", "") }}')" 
+                                    class="py-1 px-3 text-xs bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition">
+                                Edit (UPDATE)
+                            </button>
+                            
+                            <!-- Button to Delete (DELETE) -->
+                            <a href="{{ url_for('delete_club', club_id=club['id']) }}" 
+                               onclick="return confirm('Are you sure you want to delete the club {{ club['name'] }}?')"
+                               class="py-1 px-3 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                Delete (DELETE)
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="mt-4 pt-4 border-t border-gray-100">
+                            <span class="text-xs text-gray-400">Not your club to manage.</span>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            
+            {% if not clubs %}
+                <div class="md:col-span-3 text-center py-10 text-gray-500">
+                    No clubs have been created yet. Be the first!
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Edit Modal (for UPDATE) -->
+    <div id="editClubModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-4 text-gray-800">Edit Club Details</h2>
+            <form id="editClubForm" method="POST" action="">
+                <input type="hidden" name="_method" value="PUT"> <!-- Custom method override for RESTfulness -->
+                
+                <div class="mb-4">
+                    <label for="edit_club_name" class="block text-sm font-medium text-gray-700">Club Name</label>
+                    <input type="text" id="edit_club_name" name="club_name" required 
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                </div>
+                
+                <div class="mb-6">
+                    <label for="edit_club_description" class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea id="edit_club_description" name="club_description" rows="4" required
+                              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="document.getElementById('editClubModal').style.display='none'" 
+                            class="py-2 px-4 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button type="submit" class="py-2 px-4 rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                        Save Changes (UPDATE)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Function to open the edit modal and populate fields
+        function openEditModal(clubId, name, description) {
+            const modal = document.getElementById('editClubModal');
+            const form = document.getElementById('editClubForm');
+            
+            // Set the form action to the dynamic edit route
+            form.action = `/edit_club/${clubId}`;
+            
+            // Populate form fields
+            document.getElementById('edit_club_name').value = name;
+            document.getElementById('edit_club_description').value = description;
+            
+            modal.style.display = 'block';
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('editClubModal');
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
